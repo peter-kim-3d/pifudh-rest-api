@@ -40,8 +40,15 @@ async def upload_image(file: UploadFile = File(...)):
     image_id = str(uuid4())
     filename = f"{image_id}-{file.filename}"
     file_path = os.path.join(IMAGE_DIR, filename)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        # Log the error and return an HTTP exception
+        print(f"Failed to save file: {e}")
+        raise HTTPException(status_code=500, detail="Could not save file")
+
     return ImageUploadResponse(image_id=image_id, status="success")
 
 @app.post("/pifuhd/api/v1/execution/prepare", response_model=PoseDataResponse)
