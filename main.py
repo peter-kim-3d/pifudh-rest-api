@@ -1,6 +1,10 @@
+import os
+import shutil
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from typing import Optional
 from pydantic import BaseModel
+from uuid import uuid4
 
 app = FastAPI()
 
@@ -26,11 +30,26 @@ class JobStatusResponse(BaseModel):
     job_id: str
     status: str  # 'queued', 'processing', 'completed', 'error'
 
+# Directory to save uploaded images
+IMAGE_DIR = "uploaded_images"
+os.makedirs(IMAGE_DIR, exist_ok=True)
+
 # Define your API endpoints
 @app.post("/pifuhd/api/v1/execution/upload", response_model=ImageUploadResponse)
 async def upload_image(file: UploadFile = File(...)):
-    # Logic to save the image and generate an image_id
-    return ImageUploadResponse(image_id="generated_id", status="success")
+    image_id = str(uuid4())
+    filename = f"{image_id}-{file.filename}"
+    file_path = os.path.join(IMAGE_DIR, filename)
+
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        # Log the error and return an HTTP exception
+        print(f"Failed to save file: {e}")
+        raise HTTPException(status_code=500, detail="Could not save file")
+
+    return ImageUploadResponse(image_id=image_id, status="success")
 
 @app.post("/pifuhd/api/v1/execution/prepare", response_model=PoseDataResponse)
 async def prepare_pose_data(request: PoseDataRequest):
