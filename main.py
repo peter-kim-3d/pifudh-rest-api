@@ -1,10 +1,12 @@
 import os
 import shutil
+from motor.motor_asyncio import AsyncIOMotorClient
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel
 from uuid import uuid4
+from datetime import datetime
 
 app = FastAPI()
 
@@ -30,9 +32,28 @@ class JobStatusResponse(BaseModel):
     job_id: str
     status: str  # 'queued', 'processing', 'completed', 'error'
 
+# Pydantic model for the image records
+class ImageRecord(BaseModel):
+    image_id: str
+    file_path: str
+    uploaded_at: datetime
+    status: str
+
 # Directory to save uploaded images
 IMAGE_DIR = "uploaded_images"
 os.makedirs(IMAGE_DIR, exist_ok=True)
+
+client = AsyncIOMotorClient(os.environ.get("MONGODB_URI", "mongodb://localhost:27017"))
+db = client.pifuhd
+
+# GET endpoint to fetch the list of images
+@app.get("/pifuhd/api/v1/execution/images", response_model=List[ImageRecord])
+async def get_image_list():
+    try:
+        images = await db.images.find().to_list(None)
+        return images
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Define your API endpoints
 @app.post("/pifuhd/api/v1/execution/upload", response_model=ImageUploadResponse)
@@ -48,6 +69,13 @@ async def upload_image(file: UploadFile = File(...)):
         # Log the error and return an HTTP exception
         print(f"Failed to save file: {e}")
         raise HTTPException(status_code=500, detail="Could not save file")
+    
+    await db.images.insert_one({
+        "image_id": image_id,
+        "file_path": file_path,
+        "uploaded_at": datetime.now(),
+        "status": "uploaded"
+    })
 
     return ImageUploadResponse(image_id=image_id, status="success")
 
